@@ -1,141 +1,50 @@
 
 #!/bin/bash
 
-# This is our local modification of the lyrics.sh script from Bash-Snippets. This script accepts arguments and options and allows the user to select from a list of 5 songs
+artist_name=""
+song_name=""
 
-# To learn how this script works, run this script with the -h option in the command line!
-
-# Author: Alexander Epstein https://github.com/alexanderepstein
-# Codecademy Edits by Prabhjot Singh https://github.com/Prince25
-artist="false"
-song="false"
-filePath=""
-dataFile="data/lyrics.json"
-
-## Finds lyrics from the JSON file based on the artist and song, and then echoes it to stdout
-FindLyrics() {
-  artist="$1"
-  song="$2"
-
-  jq -c '.[]' "$dataFile" | while read -r item; do
-    if [[ "$(jq -r '.artist' <<< "$item")" == "$artist" ]] && [[ "$(jq -r '.song' <<< "$item")" == "$song" ]]; then
-      printf "$(jq -r '.lyrics' <<< "$item")" 2> /dev/null
-      return "$?"
-    fi
-  done
-
-  return "$?"
+# Gets random song and its respective artist from the list of songs
+GenerateRandomArtistAndSong() {
+  numSongs=$(cat data/lyrics.json | jq 'length')
+  randomNum=$((RANDOM % $numSongs))
+  song=$(jq -r --argjson num "$randomNum" '.[$num]' < data/lyrics.json)
+  artist_name=$(jq -r '.artist' <<< "$song")
+  song_name=$(jq -r '.song' <<< "$song")
 }
 
+echo "Welcome to the Song Guesser!"
+echo "Ready to play? (y/n)"
+read -r play
 
-# Grab Lyrics from the JSON "API"
-# $1 = The Artist
-# $2 = The Song
-getLyrics()
-{
-  encodedArtist=$(echo "$1" | tr '[:upper:]' '[:lower:]' | xargs)  # Lowercase the artist, trim whitespaces
-  encodedSong=$(echo "$2" | tr '[:upper:]' '[:lower:]'  | xargs)   # Lowercase the song, trim whitespaces
-  lyrics="$(FindLyrics "$encodedArtist" "$encodedSong" 2> /dev/null)"
-  if [[ $lyrics == "" ]];then { echo "Error: No lyrics found for $1 - $2"; return 1; }; fi
-}
+while [ "$play" == "y" ]  # Loop until the user answers "y"
+do
+  echo "Fetching lyrics..."
+  echo
+  sleep 3  
 
+# Calls the function to get a random song and its respective artist
+  GenerateRandomArtistAndSong 
+  # Call the lyrics script to get the lyrics of the song below:
+  lyrics=$(./lyrics.sh -a "$artist_name" -s "$song_name")
+  
+  echo "$lyrics"
+  echo
 
-printLyrics()
-{
-  if [[ $filePath == "" ]]; then echo -e "$lyrics"
+  echo "Guess the name of the song or its artist"
+  read -r guess
+  guess=$(echo "$guess" | tr '[:upper:]' '[:lower:]' | xargs)  # Lowercase the guess, trim whitespaces
+
+  # Checks if the user's guess matches the artist or song name
+  if [[ "$guess" == "$song_name" || "$guess" == "$artist_name" ]]
+  then
+    echo "You got it!"
   else
-    if [ -f "$filePath" ]; then
-      echo -n "File already exists, do you want to overwrite it [Y/n]: "
-      read -r answer
-      if [[ "$answer" == [Yy] ]]; then
-        echo -e "$lyrics" > "$filePath";
-      fi
-    else
-        echo -e "$lyrics" > "$filePath";
-    fi
-   fi
-}
-
-
-usage()
-{
-  cat <<EOF
-Lyrics
-Description: Fetch lyrics for a certain song.
-Usage: lyrics [flags] or lyrics [-a] [arg] [-s] [arg]
-Options:
-  -a  Artist of the song to fetch lyrics for
-  -s  Song of the artist to fetch lyrics for
-  -f  Export the lyrics to file rather than outputting to stdout
-  -h  Show the help
-  -v  Get the tool version
-Songs available:
-  In The End - Linkin Park
-  Yellow - Coldplay
-  Rolling in the Deep - Adele
-  Bohemian Rhapsody - Queen
-  Billie Jean - Michael Jackson
-Examples:
-   ./lyrics.sh -a Coldplay -s Yellow
-   ./lyrics.sh -a Coldplay -s Yellow -f ~/yellowLyrics.txt
-EOF
-}
-
-
-while getopts "f:a:s:uvh" opt; do
-  case "$opt" in
-    \?) echo "Invalid option: -$OPTARG" >&2
-        exit 1
-        ;;
-    h)  usage
-        exit 0
-        ;;
-    v)  echo "Version $currentVersion"
-        exit 0
-        ;;
-    f)
-       filePath="$OPTARG"
-        ;;
-    a)
-        artist="true"
-        if [[ "$(echo "$@" | grep -Eo "\-s")" == "-s" ]];then song="true";fi # wont go through both options if arg spaced and not quoted this solves that issue (dont need this but once had bug on system where it was necessary)
-        if [[ "$(echo "$@" | grep -Eo "\-f")" == "-f" ]];then filePath=$(echo "$@" | grep -Eo "\-f [ a-z A-Z / 0-9 . \ ]*[ -]?" | sed s/-f//g | sed s/-//g | sed s/^" "//g);fi
-      ;;
-    s)
-        song="true"
-        if [[ "$(echo "$@" | grep -Eo "\-a")" == "-a" ]];then artist="true";fi # wont go through both options if arg spaced and not quoted this solves that issue (dont need this but once had bug on system where it was necessary)
-        if [[ "$(echo "$@" | grep -Eo "\-f")" == "-f" ]];then filePath=$(echo "$@" | grep -Eo "\-f [ a-z A-Z / 0-9 . \ ]*[ -]?" | sed s/-f//g | sed s/-//g | sed s/^" "//g);fi
-      ;;
-    :)  echo "Option -$OPTARG requires an argument." >&2
-        exit 1
-        ;;
-  esac
-done
-
-
-# special set of first arguments that have a specific behavior across tools
-if [[ $# == "0" ]]; then
-  usage ## if calling the tool with no flags and args chances are you want to return usage
-  exit 0
-elif [[ $# == "1" ]]; then
-  if [[ $1 == "help" ]]; then
-    usage
-    exit 0
+    echo "Incorrect!"
   fi
-fi
 
-if ($artist && ! $song)  || ($song && ! $artist);then
-  echo "Error: the -a and the -s flag must be used to fetch lyrics."
-  exit 1
-elif $artist && $song;then
-  song=$(echo "$@" | grep -Eo "\-s [ a-z A-Z 0-9 . \ ]*[ -]?" | sed s/-s//g | sed s/-//g | sed s/^" "//g)
-  if [[ $song == "" ]];then { echo "Error: song could not be parsed from input."; exit 1; };fi
-  artist=$(echo "$@" | grep -Eo "\-a [ a-z A-Z 0-9 . \ ]*[ -]?" | sed s/-a//g | sed s/-//g | sed s/^" "//g)
-  if [[ $artist == "" ]];then { echo "Error: artist could not be parsed from input."; exit 1; };fi
-  getLyrics "$artist" "$song" || exit 1
-  printLyrics
-else
-  { clear; echo "You shouldnt be here but maaaaaaybeee you slipped passed me, learn to use the tool!"; sleep 2; clear;}
-  usage
-  exit 1
-fi
+  # Show the user the answer, and ask if they want to play again
+  echo "The song was $song_name by $artist_name"
+  echo "Ready to play again? (y/n)"
+  read -r play
+done

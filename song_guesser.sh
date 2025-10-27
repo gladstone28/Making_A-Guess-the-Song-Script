@@ -26,7 +26,7 @@ do
 # Calls the function to get a random song and its respective artist
   GenerateRandomArtistAndSong 
   # Call the lyrics script to get the lyrics of the song below:
-  
+  lyrics=$(./lyrics.sh -a "$artist_name" -s "$song_name")
   
   echo "$lyrics"
   echo
